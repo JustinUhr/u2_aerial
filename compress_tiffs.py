@@ -3,6 +3,8 @@ import sys
 import argparse
 from PIL import Image, ImageFile
 from tqdm import tqdm
+import imageio.v3 as iio
+import io
 
 # setup logging
 import logging
@@ -24,13 +26,52 @@ def open_image(input_path):
     img = Image.open(input_path)
     return img
 
-def make_jp2(img, output_path):
-    # Convert to jp2
-    img.save(output_path, format='JPEG2000')
+import numpy as np
 
-def make_jpeg(img, output_path, quality=100):
+def make_jp2(input_path, output_path):
+    img = iio.imread(input_path)
+    if img.dtype == np.uint16:
+        img = img.astype(np.uint8)
+
+    # Convert to jp2
+    output = io.BytesIO()
+    iio.imwrite(output, img, plugin="opencv", extension=".jp2")
+
+    # Save the output to a file
+    with open(output_path, 'wb') as f:
+        f.write(output.getvalue())
+
+# def make_jp2(input_path, output_path):
+#     # Use imageio to read the image
+#     img = iio.imread(input_path)
+
+#     # Convert to jp2
+#     iio.imwrite(output_path, img, extension=".jp2")
+
+def large_image_to_jpeg(input_path, output_path, quality=100):
+    # Use imageio to read the image
+    img = iio.imread(input_path)
+
+    # Convert the numpy array from 16-bit to 8-bit
+    # Base this on the method used in PIL which is ```img = img.point(lambda p: p * (255/65535)).convert('L')`
+    img = img * (255/65535)
+    img = img.astype('uint8')
+
+    # Write the image to a jpeg file
+    output = io.BytesIO()
+    iio.imwrite(output, img, plugin="pillow", extension=".jpeg")
+
+    # Save the output to a file
+    with open(output_path, 'wb') as f:
+        f.write(output.getvalue())
+
+
+def make_jpeg(input_path, output_path, quality=100):
     # Check the mode of the image
     # print(f"Image mode: {img.mode}")
+
+    large_image_to_jpeg(input_path, output_path, quality=quality)
+    return
 
     # Convert from 16-bit grayscale to 8-bit grayscale
     img = img.point(lambda p: p * (255/65535)).convert('L')
