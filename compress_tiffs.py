@@ -1,7 +1,10 @@
 import os
 import sys
 import argparse
+
 from PIL import Image, ImageFile
+import cv2
+
 from tqdm import tqdm
 
 # setup logging
@@ -24,11 +27,77 @@ def open_image(input_path):
     img = Image.open(input_path)
     return img
 
-def make_jp2(img, output_path):
-    # Convert to jp2
-    img.save(output_path, format='JPEG2000')
+def make_jp2(input_path, output_path):
+    # Convert to jp2 using opencv
+    img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
+    cv2.imwrite(output_path, img, [int(cv2.IMWRITE_JPEG2000_COMPRESSION_X1000), 1000])
 
-def make_jpeg(img, output_path, quality=100):
+def large_image_to_jpeg(input_path, output_path, quality=100):
+    # Open the image
+    img = open_image(input_path)
+    
+    img.verify()  # verify that the image is not broken
+
+    img = open_image(input_path)
+
+    # Get the size of the image
+    width, height = img.size
+
+    log.info(f"Image size: {width}x{height}")
+
+    # Set the tile size
+    tile_size = 5000
+
+    # Create a list to hold the converted tiles
+    tiles = []
+
+    for x in range(0, width, tile_size):
+        for y in range(0, height, tile_size):
+            box = (x, y, min(x+tile_size, width), min(y+tile_size, height))
+            tile = img.crop(box)
+
+            # Convert from 16-bit grayscale to 8-bit grayscale
+            tile = tile.point(lambda p: p * (255/65535)).convert('L')
+
+            # Convert to RGB if not already
+            if tile.mode != 'RGB':
+                tile = tile.convert('RGB')
+
+            tiles.append(tile)
+
+    log.info(f"Number of tiles: {len(tiles)}")
+
+    # Create a new image
+    new_img = Image.new('RGB', (width, height))
+
+    # Paste the tiles into the new image
+    x_offset = 0
+    y_offset = 0
+    for tile in tiles:
+        new_img.paste(tile, (x_offset, y_offset))
+        y_offset += tile.height  # Use the height of the tile
+        if y_offset >= height:
+            y_offset = 0
+            x_offset += tile.width  # Use the width of the tile
+
+    # Save the new image as jpeg
+    new_img.save(output_path, format='JPEG', quality=quality)
+
+def make_jpeg(input_path, output_path, quality=100):
+    # Convert to jpeg using PIL
+
+    # Check the file size
+    file_size = os.path.getsize(input_path)
+    log.info(f"File size: {file_size}")
+
+    # If the file size is over 700MB, convert the image in tiles
+    if file_size > 700000000:
+        large_image_to_jpeg(input_path, output_path, quality=quality)
+        return
+
+    # Open the image
+    img = open_image(input_path)
+
     # Check the mode of the image
     # print(f"Image mode: {img.mode}")
 
