@@ -1,45 +1,65 @@
-import os
-import sys
+import os, sys
 import argparse
+import time
+
+import numpy as np
+
 from PIL import Image, ImageFile
-from tqdm import tqdm
+import cv2
 import imageio.v3 as iio
 import io
 
-# setup logging
+from tqdm import tqdm
+
+# from memory_profiler import profile
+# import gc
+# import objgraph
+
+# setup logging - don't log to console
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
-# set the location of the log file
+log.setLevel(logging.DEBUG)
+log.__format__ = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# log to file
 log_file = 'compress_tiffs.log'
 log.addHandler(logging.FileHandler(log_file))
+
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# log = logging.getLogger(__name__)
+# # set the location of the log file
+# log_file = 'compress_tiffs.log'
+# log.addHandler(logging.FileHandler(log_file))
 
 log.info("Starting compress_tiffs.py")
 
 # Increase the maximum image pixel limit
 Image.MAX_IMAGE_PIXELS = 200000000
 # ImageFile.LOAD_TRUNCATED_IMAGES = True
-                                 
-
-def open_image(input_path):   
-    # Open the image
-    img = Image.open(input_path)
-    return img
-
-import numpy as np
-
+                            
+# @profile
 def make_jp2(input_path, output_path):
-    img = iio.imread(input_path)
-    if img.dtype == np.uint16:
-        img = img.astype(np.uint8)
+    # Convert to jp2 using opencv
+    log.debug(f"Converting {input_path} to jp2")
+    try:
+        img = cv2.imread(input_path, cv2.IMREAD_UNCHANGED)
+        log.debug(f"Image shape: {img.shape}")
+        cv2.imwrite(output_path, img, [int(cv2.IMWRITE_JPEG2000_COMPRESSION_X1000), 1000])
+        log.debug(f"Converted {input_path} to jp2")
+    except Exception as e:
+        log.error(f"Error compressing image: {e}")
 
-    # Convert to jp2
-    output = io.BytesIO()
-    iio.imwrite(output, img, plugin="opencv", extension=".jp2")
+# def make_jp2(input_path, output_path):
+#     img = iio.imread(input_path)
+#     if img.dtype == np.uint16:
+#         img = img.astype(np.uint8)
 
-    # Save the output to a file
-    with open(output_path, 'wb') as f:
-        f.write(output.getvalue())
+#     # Convert to jp2
+#     output = io.BytesIO()
+#     iio.imwrite(output, img, plugin='opencv', extension='.jp2', params=[int(cv2.IMWRITE_JPEG2000_COMPRESSION_X1000), 1000])
+
+#     # Save the output to a file
+#     with open(output_path, 'wb') as f:
+#         f.write(output.getvalue())
 
 # def make_jp2(input_path, output_path):
 #     # Use imageio to read the image
@@ -48,45 +68,117 @@ def make_jp2(input_path, output_path):
 #     # Convert to jp2
 #     iio.imwrite(output_path, img, extension=".jp2")
 
-def large_image_to_jpeg(input_path, output_path, quality=100):
+# @profile
+def make_jpeg(input_path, output_path, quality=100):
+    log.debug(f"Converting {input_path} to jpeg")
     # Use imageio to read the image
-    img = iio.imread(input_path)
+    try:
+        img = iio.imread(input_path)
+        log.debug(f"Image shape: {img.shape}")
+    except Exception as e:
+        log.error(f"Error reading image: {e}")
+        return
+
+    # Scale the image to 50%
+    try:
+        img = cv2.resize(img, (0, 0), fx=0.5, fy=0.5)
+        log.debug(f"Image shape after scaling: {img.shape}")
+    except Exception as e:
+        log.error(f"Error scaling image: {e}")
+        return
+
+    # Make an even smaller version for the thumbnail
+    try:
+        thumbnail = cv2.resize(img, (0, 0), fx=0.2, fy=0.2)
+        log.debug(f"Thumbnail shape: {thumbnail.shape}")
+    except Exception as e:
+        log.error(f"Error creating thumbnail: {e}")
+        return
 
     # Convert the numpy array from 16-bit to 8-bit
     # Base this on the method used in PIL which is ```img = img.point(lambda p: p * (255/65535)).convert('L')`
-    img = img * (255/65535)
-    img = img.astype('uint8')
+    try:
+        img = img * (255/65535)
+        log.debug(f"Image shape after conversion: {img.shape}")
+        img = img.astype('uint8')
+        log.debug(f"Image shape after conversion to uint8: {img.shape}")
+    except Exception as e:
+        log.error(f"Error converting image: {e}")
+        return
+    
+    # Do the same for the thumbnail
+    try:
+        thumbnail = thumbnail * (255/65535)
+        log.debug(f"Thumbnail shape after conversion: {thumbnail.shape}")
+        thumbnail = thumbnail.astype('uint8')
+        log.debug(f"Thumbnail shape after conversion to uint8: {thumbnail.shape}")
+    except Exception as e:
+        log.error(f"Error converting thumbnail: {e}")
+        return
+    
+    # Use Pillow to save the thumbnail directly, no need to use imageio
+    try:
+        thumbnail = Image.fromarray(thumbnail)
+        thumbnail.save(output_path.replace('.jpeg', '_thumbnail.jpeg'), format='JPEG', quality=quality)
+        log.debug(f"Thumbnail saved to file: {output_path.replace('.jpeg', '_thumbnail.jpeg')}")
+    except Exception as e:
+        log.error(f"Error saving thumbnail: {e}")
+        return
+    
+    # Use imageio to write the image to a jpeg file
 
-    # Write the image to a jpeg file
+    # Create a BytesIO object to write the image to
     output = io.BytesIO()
-    iio.imwrite(output, img, plugin="pillow", extension=".jpeg")
+    try:
+        # Write the image to the BytesIO object
+        log.debug(f"Writing image to jpeg file: {output_path}")
+        iio.imwrite(output, img, plugin="pillow", extension=".jpeg", quality=quality)
+        log.debug(f"Image written to jpeg file: {output_path}")
 
-    # Save the output to a file
-    with open(output_path, 'wb') as f:
-        f.write(output.getvalue())
+        # Save the output to a file
+        log.debug(f"Saving image to file: {output_path}")
+        with open(output_path, 'wb') as f:
+            f.write(output.getvalue())
+        log.debug(f"Image saved to file: {output_path}")
+    except Exception as e:
+        log.error(f"Error: {e}")
+    finally:
+        output.close()
+        log.debug(f"Closed BytesIO object")
+
+    # objgraph.show_refs([img], filename='refs.png')
+    # gc.collect()
+    # print(gc.get_stats())
 
 
-def make_jpeg(input_path, output_path, quality=100):
-    # Check the mode of the image
-    # print(f"Image mode: {img.mode}")
+## @profile
+# def make_jpeg_no_streaming(input_path, output_path, quality=100):
+#     # add 'test' to the file name to test the memory usage
+#     output_path = output_path.replace('.jpeg', '_test.jpeg')
 
-    large_image_to_jpeg(input_path, output_path, quality=quality)
-    return
+#     # Use large_image_to_jpeg for files over 700 MB
 
-    # Convert from 16-bit grayscale to 8-bit grayscale
-    img = img.point(lambda p: p * (255/65535)).convert('L')
+#     img = Image.open(input_path)
 
-    # print(f"Image mode after conversion: {img.mode}")
+#     # Convert from 16-bit grayscale to 8-bit grayscale
+#     img = img.point(lambda p: p * (255/65535)).convert('L')
 
-    # Convert to RGB if not already
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
+#     # print(f"Image mode after conversion: {img.mode}")
 
-    # print(f"Image mode after conversion to RGB: {img.mode}")
+#     # Convert to RGB if not already
+#     if img.mode != 'RGB':
+#         img = img.convert('RGB')
 
-    # Convert to jpeg
-    img.save(output_path, format='JPEG', quality=quality)
+#     # print(f"Image mode after conversion to RGB: {img.mode}")
 
+#     # Convert to jpeg
+#     img.save(output_path, format='JPEG', quality=quality)
+
+#     # Clean up
+#     img.close()
+#     img = None
+
+# @profile
 def both_images_already_exist(tiff_file, output_dir):
     jp2_path = os.path.join(output_dir, tiff_file.replace('.tiff', '.jp2'))
     jp2_path = jp2_path.replace('.tif', '.jp2')
@@ -141,7 +233,7 @@ if __name__ == "__main__":
         # print(f'jpeg_path: {jpeg_path}')
 
         if args.existing == 'skip':
-            if os.path.exists(jp2_path) and os.path.exists(jpeg_path):
+            if both_images_already_exist(tiff_file, output_dir):
                 log.debug(f"Skipping {tiff_file} as jp2 and jpeg files already exist")
                 continue
         elif args.existing == 'overwrite':
@@ -151,6 +243,9 @@ if __name__ == "__main__":
             if os.path.exists(jpeg_path):
                 log.debug(f"Overwriting {jpeg_path}")
                 os.remove(jpeg_path)
+            if os.path.exists(jpeg_path.replace('.jpeg', '_thumbnail.jpeg')):
+                log.debug(f"Overwriting {jpeg_path.replace('.jpeg', '_thumbnail.jpeg')}")
+                os.remove(jpeg_path.replace('.jpeg', '_thumbnail.jpeg'))
         else:
             # if jp2 or jpeg file already exists, raise an error
             if os.path.exists(jp2_path) or os.path.exists(jpeg_path):
@@ -162,6 +257,12 @@ if __name__ == "__main__":
 
         # Convert to jp2 and jpeg
         make_jp2(tiff_path, jp2_path)
+        log.info(f"Converted {tiff_file} to jp2")
+        # time.sleep(20)
+
         make_jpeg(tiff_path, jpeg_path, quality=quality)
+        log.info(f"Converted {tiff_file} to jpeg")
+        # time.sleep(20)
+        # make_jpeg_no_streaming(tiff_path, jpeg_path, quality=quality)
         # print(f"Converted {tiff_file} to jp2 and jpeg")
     print("Done")
