@@ -17,12 +17,20 @@ from tqdm import tqdm
 
 # setup logging - don't log to console
 import logging
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%d/%b/%Y %H:%M:%S',
+    filename='compress_tiffs.log',
+    filemode='w'
+)
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
-log.__format__ = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-# log to file
-log_file = 'compress_tiffs.log'
-log.addHandler(logging.FileHandler(log_file))
+
+# # log to console
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+log.addHandler(ch)
 
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # log = logging.getLogger(__name__)
@@ -70,6 +78,10 @@ def make_jp2(input_path, output_path):
 
 # @profile
 def make_jpeg(input_path, output_path, quality='100'):
+    # Convert quality to an integer if it is a numberic string
+    if quality.isdigit():
+        quality = int(quality)
+
     log.debug(f"Converting {input_path} to jpeg")
     # Use imageio to read the image
     try:
