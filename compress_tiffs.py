@@ -69,7 +69,7 @@ def make_jp2(input_path, output_path):
 #     iio.imwrite(output_path, img, extension=".jp2")
 
 # @profile
-def make_jpeg(input_path, output_path, quality=100):
+def make_jpeg(input_path, output_path, quality='100'):
     log.debug(f"Converting {input_path} to jpeg")
     # Use imageio to read the image
     try:
@@ -193,16 +193,28 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Convert tiff images in a given directory to jp2 and jpeg')
     parser.add_argument('input_dir', type=str, help='input directory of tiff images to be converted to jp2 and jpeg')
     parser.add_argument('output_dir', type=str, help='output directory where jp2 and jpeg images will be saved, will be created if not exists')
-    parser.add_argument('--quality', type=str, default=100, help='quality of jpeg image, default is 100')
+    parser.add_argument('--quality', type=str, default='100', 
+                        help='quality of thumbnail image, default is 100. '
+                        'You may also use one of the following presets: '
+                        'web_low, web_medium, web_high, web_very_high, '
+                        'web_maximum, low, medium, high, maximum.')
     parser.add_argument('--existing', type=str, default='raise', help='what to do if jp2 or jpeg file already exists, options are: raise, skip, overwrite. Default is raise.')
     args = parser.parse_args()
-    input_dir = args.input_dir
-    output_dir = args.output_dir
-    quality = args.quality
+    input_dir: str = args.input_dir
+    output_dir: str = args.output_dir
+    quality: str = args.quality
 
     # Check if quality is a valid number or preset
-    if not quality.isdigit() and quality not in ['web_low', 'web_medium', 'web_high', 'web_very_high', 'web_maximum', 'low', 'medium', 'high', 'maximum']:
-        raise Exception("Invalid value for --quality, options are: number between 1 and 100, or: web_low, web_medium, web_high, web_very_high, web_maximum, low, medium, high, maximum") 
+    if (not quality.isdigit() and 
+        quality not in ['web_low', 'web_medium', 'web_high', 'web_very_high', 
+                        'web_maximum', 'low', 'medium', 'high', 'maximum']):
+        raise Exception("Invalid value for --quality, options are: an integer between 1 and 100, or: web_low, web_medium, web_high, web_very_high, web_maximum, low, medium, high, maximum") 
+
+    # If quality is a number, confirm it is between 1 and 100
+    if quality.isdigit():
+        int_quality = int(quality)
+        if int_quality < 1 or int_quality > 100:
+            raise Exception("Quality must be between 1 and 100")
 
     if args.existing not in ['raise', 'skip', 'overwrite']:
         raise Exception("Invalid value for --existing, options are: raise, skip, overwrite")
