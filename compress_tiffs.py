@@ -203,8 +203,8 @@ def both_images_already_exist(tiff_file, output_dir):
 if __name__ == "__main__":
     # get args
     parser = argparse.ArgumentParser(description='Convert tiff images in a given directory to jp2 and jpeg')
-    parser.add_argument('input_dir', type=str, help='input directory of tiff images to be converted to jp2 and jpeg')
-    parser.add_argument('output_dir', type=str, help='output directory where jp2 and jpeg images will be saved, will be created if not exists')
+    parser.add_argument('--input_dir', type=str, required=True, help='input directory of tiff images to be converted to jp2 and jpeg')
+    parser.add_argument('--output_dir', type=str, required=True, help='output directory where jp2 and jpeg images will be saved, will be created if not exists')
     parser.add_argument('--quality', type=str, default='100', 
                         help='quality of thumbnail image, default is 100. '
                         'You may also use one of the following presets: '
