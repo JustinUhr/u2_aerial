@@ -1,6 +1,6 @@
 Glymur==0.12.9.post1
 imageio==2.34.0
-lxml==5.1.0
+lxml==6.1.0
 memory-profiler==0.61.0
 numpy==1.26.4
 objgraph==3.6.1
